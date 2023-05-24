@@ -15,7 +15,7 @@ import (
 )
 
 const aspect float64 = 16.0 / 9.0
-const imageW int = 640
+const imageW int = 480
 const imageH int = int(float64(imageW) / aspect)
 
 func main() {
@@ -24,6 +24,7 @@ func main() {
 	clock := widget.NewLabel("")
 	img := canvas.NewImageFromImage(render())
 	img.FillMode = canvas.ImageFillOriginal
+
 	updateTime(clock)
 
 	w.SetContent(container.NewVBox(
@@ -72,13 +73,13 @@ func render() image.Image {
 
 func getHitDistance(center *Vec3, radius float64, r *Ray) float64 {
 	oc := Subtract(r.Origin, *center)
-	a := Dot(r.Dir, r.Dir)
-	b := 2.0 * Dot(oc, r.Dir)
-	c := Dot(oc, oc) - radius*radius
+	a := r.Dir.SqrMag()
+	half_b := Dot(oc, r.Dir)
+	c := oc.SqrMag() - radius*radius
 
-	discriminant := b*b - 4*a*c
+	discriminant := half_b*half_b - a*c
 	if discriminant > 0 {
-		return (-b - math.Sqrt(discriminant)) / (2 * a)
+		return (-half_b - math.Sqrt(discriminant)) / a
 	} else {
 		return -1
 	}
@@ -99,7 +100,7 @@ func rayColor(ray *Ray) color.Color {
 }
 
 func updateTime(clock *widget.Label) {
-	formatted := time.Now().Format("Time: 03:04:05")
+	formatted := time.Now().Format("Time: 15:04:05")
 	clock.SetText(formatted)
 }
 
