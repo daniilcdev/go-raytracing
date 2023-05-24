@@ -48,3 +48,15 @@ func Dot(a Vec3, b Vec3) float64 {
 func Normalized(v Vec3) Vec3 {
 	return *v.Scale(1 / v.Mag())
 }
+
+func Mul(v Vec3, t float64) Vec3 {
+	return Vec3{v.X * t, v.Y * t, v.Z * t}
+}
+
+func Subtract(a Vec3, b Vec3) Vec3 {
+	return Vec3{a.X - b.X, a.Y - b.Y, a.Z - b.Z}
+}
+
+func Add(a Vec3, b Vec3) Vec3 {
+	return Vec3{a.X + b.X, a.Y + b.Y, a.Z + b.Z}
+}
