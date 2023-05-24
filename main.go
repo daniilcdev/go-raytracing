@@ -70,7 +70,7 @@ func render() image.Image {
 	return img
 }
 
-func getCastDistance(center *Vec3, radius float64, r *Ray) float64 {
+func getHitDistance(center *Vec3, radius float64, r *Ray) float64 {
 	oc := Subtract(r.Origin, *center)
 	a := Dot(r.Dir, r.Dir)
 	b := 2.0 * Dot(oc, r.Dir)
@@ -85,15 +85,15 @@ func getCastDistance(center *Vec3, radius float64, r *Ray) float64 {
 }
 
 func rayColor(ray *Ray) color.Color {
-	hitDistance := getCastDistance(&Vec3{Z: -1}, 0.5, ray)
+	hitDistance := getHitDistance(&Vec3{Z: -1}, 0.5, ray)
 	if hitDistance > 0 {
 		n := Normalized(Subtract(ray.At(hitDistance), Vec3{Z: -1}))
 		return n.Add(Vec3One()).Scale(0.5).ToRGB()
 	}
 
 	unitDir := Normalized(ray.Dir)
-	t := 0.5 * (unitDir.Y + 1.0)
-	c := Add(Mul(Vec3One(), 1-t), Mul(Vec3{0.5, 0.7, 1}, t))
+	hitDistance = 0.5 * (unitDir.Y + 1.0)
+	c := Add(Mul(Vec3One(), 1-hitDistance), Mul(Vec3{0.5, 0.7, 1}, hitDistance))
 
 	return c.ToRGB()
 }
