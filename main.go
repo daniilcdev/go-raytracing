@@ -14,23 +14,26 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-const aspect float64 = 16.0 / 9.0
+const aspect float32 = 16.0 / 9.0
 const imageW int = 480
-const imageH int = int(float64(imageW) / aspect)
+const imageH int = int(float32(imageW) / aspect)
 
 func main() {
 	a := app.New()
 	w := a.NewWindow("Viewport")
 	clock := widget.NewLabel("")
 	img := canvas.NewImageFromImage(render())
-	img.FillMode = canvas.ImageFillOriginal
+	img.FillMode = canvas.ImageFillOriginal | canvas.ImageFillStretch
+
+	fmt.Println(img.Size())
 
 	updateTime(clock)
 
-	w.SetContent(container.NewVBox(
-		clock, img,
-	))
-	w.Resize(fyne.NewSize(float32(imageW)+clock.Size().Height, float32(imageH)))
+	size := fyne.NewSize(float32(imageW)+clock.Size().Width, float32(imageH))
+	hBox := container.NewHBox(container.NewVBox(img), clock)
+
+	w.SetContent(hBox)
+	w.Resize(size)
 
 	go func() {
 		for range time.Tick(time.Second) {
@@ -48,8 +51,8 @@ func render() image.Image {
 	const focalLength = 1.0
 
 	origin := Vec3{}
-	horizontal := Vec3{X: viewportW}
-	vertical := Vec3{Y: viewportH}
+	horizontal := Vec3{X: float64(viewportW)}
+	vertical := Vec3{Y: float64(viewportH)}
 
 	llc := Subtract(origin, Mul(horizontal, 0.5))
 	llc = Subtract(llc, Mul(vertical, 0.5))
@@ -67,7 +70,6 @@ func render() image.Image {
 			img.Set(x, y, pixel)
 		}
 	}
-
 	return img
 }
 
