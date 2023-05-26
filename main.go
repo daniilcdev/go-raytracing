@@ -16,9 +16,9 @@ import (
 )
 
 const aspect float32 = 16.0 / 9.0
-const imageW int = 720
+const imageW int = 400
 const imageH int = int(float32(imageW) / aspect)
-const samplesPerPixel int = 1
+const maxDepth int = 10
 
 func renderTexture() *image.RGBA {
 	return image.NewRGBA(image.Rect(0, 0, imageW, imageH))
@@ -31,25 +31,33 @@ func main() {
 	cam = NewCamera()
 
 	var objs []Hittable = make([]Hittable, 0)
-	objs = append(objs, Sphere{
-		Center: Vec3{0, 0, -1},
-		Radius: 0.5,
-	})
-	objs = append(objs, Sphere{
-		Center: Vec3{0, -100.5, -1},
-		Radius: 100,
-	})
+	objs = append(objs,
+		Sphere{
+			Center: Vec3{0, -100.5, -1},
+			Radius: 100,
+		},
+		Sphere{
+			Center: Vec3{0, 0, -1},
+			Radius: 0.5,
+		},
+		Sphere{
+			Center: Vec3{-1, 0, -1},
+			Radius: 0.5,
+		},
+		Sphere{
+			Center: Vec3{1, 0, -1},
+			Radius: 0.5,
+		},
+	)
 
 	world = HittableList{objects: objs}
 
 	a := app.New()
 	w := a.NewWindow("Viewport")
-	clock := widget.NewLabel("")
+	clock := widget.NewLabel("FPS: 60.00")
 	renderTexture := renderTexture()
 	img := canvas.NewImageFromImage(renderTexture)
 	img.FillMode = canvas.ImageFillOriginal | canvas.ImageFillStretch
-
-	updateTime(clock)
 
 	size := fyne.NewSize(float32(imageW)+clock.Size().Width, float32(imageH))
 	hBox := container.NewHBox(container.NewVBox(img), clock)
@@ -57,19 +65,13 @@ func main() {
 	w.SetContent(hBox)
 	w.Resize(size)
 
-	go func() {
-		for range time.Tick(time.Second) {
-			updateTime(clock)
-		}
-	}()
-
-	go renderScene(renderTexture, img)
+	go renderScene(renderTexture, img, clock)
 
 	w.ShowAndRun()
 	tidyUp()
 }
 
-func renderScene(renderTexture *image.RGBA, img *canvas.Image) {
+func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Label) {
 	fmt.Println("Cold boot...")
 	coldBoot := time.After(time.Second / 4)
 	<-coldBoot
@@ -78,30 +80,35 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image) {
 	img.Refresh()
 
 	t := time.Second / 60
-	duration := time.Duration(t)
+	loopDuration := time.Duration(t)
 
-	for range time.Tick(duration) {
+	for {
+		start := time.Now()
 		for y := 0; y < imageH; y++ {
 			for x := 0; x < imageW; x++ {
-				go perPixel(x, y, renderTexture)
+				perPixel(x, y, renderTexture)
 			}
 		}
 
+		duration := time.Since(start)
+		clock.SetText(fmt.Sprintf("FPS: %f", 1/duration.Seconds())[:10])
+
 		img.Refresh()
+
+		go time.After(loopDuration)
 	}
 }
 
 func perPixel(x, y int, renderTexture *image.RGBA) {
 	var samples Vec3 = Vec3{}
-	for s := 0; s < samplesPerPixel; s++ {
-		u := (float64(x) + rand.Float64()) / float64(imageW)
-		v := 1 - (float64(y)+rand.Float64())/float64(imageH)
+	u := (float64(x) + rand.Float64()*2 - 1) / float64(imageW)
+	v := 1 - (float64(y)+rand.Float64()*2-1)/float64(imageH)
 
-		ray := cam.getRay(u, v)
-		samples.Add(rayColor(&ray, &world))
-	}
+	ray := cam.getRay(u, v)
+	samples.Add(rayColor(&ray, &world, maxDepth))
 
-	samples.Scale(1. / float64(samplesPerPixel)).Scale(0.1)
+	const lerp float64 = 0.5
+	samples.Sqrt().Scale(1 - lerp)
 
 	var c color.RGBA = renderTexture.RGBAAt(x, y)
 	pixel := Vec3{
@@ -109,16 +116,22 @@ func perPixel(x, y int, renderTexture *image.RGBA) {
 		Y: float64(c.G) / 255,
 		Z: float64(c.B) / 255,
 	}
-	pixel.Scale(0.9).Add(samples)
+
+	pixel = Add(Mul(pixel, lerp), samples)
 	renderTexture.Set(x, y, pixel.ToRGB())
 }
 
-func rayColor(ray *Ray, world *Hittable) Vec3 {
+func rayColor(ray *Ray, world *Hittable, depth int) Vec3 {
 	rec := HitRecord{}
+	if depth <= 0 {
+		return Vec3{}
+	}
 
 	if (*world).Hit(ray, 0, math.Inf(1), &rec) {
-		c := Mul(Add(rec.Normal, Vec3One()), 0.5)
-		return c
+		target := Add(Add(rec.Point, rec.Normal), RandomInUnitSphere())
+		nextRay := Ray{rec.Point, Subtract(target, rec.Point)}
+		nextColor := rayColor(&nextRay, world, depth-1)
+		return Mul(nextColor, 0.5)
 	}
 
 	unitDir := Normalized(ray.Dir)
@@ -126,11 +139,6 @@ func rayColor(ray *Ray, world *Hittable) Vec3 {
 	c := Add(Mul(Vec3One(), 1-hitDistance), Mul(Vec3{0.5, 0.7, 1}, hitDistance))
 
 	return c
-}
-
-func updateTime(clock *widget.Label) {
-	formatted := time.Now().Format("Time: 15:04:05")
-	clock.SetText(formatted)
 }
 
 func tidyUp() {

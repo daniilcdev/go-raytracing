@@ -1,6 +1,9 @@
 package main
 
-import "math"
+import (
+	"math"
+	"math/rand"
+)
 
 type Vec3 struct {
 	X, Y, Z float64
@@ -17,6 +20,14 @@ func (v3 *Vec3) Scale(s float64) *Vec3 {
 	v3.X *= s
 	v3.Y *= s
 	v3.Z *= s
+
+	return v3
+}
+
+func (v3 *Vec3) Sqrt() *Vec3 {
+	v3.X = math.Sqrt(v3.X)
+	v3.Y = math.Sqrt(v3.Y)
+	v3.Z = math.Sqrt(v3.Z)
 
 	return v3
 }
@@ -63,4 +74,19 @@ func Subtract(a Vec3, b Vec3) Vec3 {
 
 func Add(a Vec3, b Vec3) Vec3 {
 	return Vec3{a.X + b.X, a.Y + b.Y, a.Z + b.Z}
+}
+
+func Random() Vec3 {
+	return Vec3{rand.Float64(), rand.Float64(), rand.Float64()}
+}
+
+func RandomRange(min, max float64) Vec3 {
+	return Vec3{
+		rand.Float64()*(max-min) + min,
+		rand.Float64()*(max-min) + min,
+		rand.Float64()*(max-min) + min}
+}
+
+func RandomInUnitSphere() Vec3 {
+	return Normalized(RandomRange(-1, 1))
 }
