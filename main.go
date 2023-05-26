@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -15,19 +16,20 @@ import (
 )
 
 const aspect float32 = 16.0 / 9.0
-const imageW int = 960
+const imageW int = 400
 const imageH int = int(float32(imageW) / aspect)
-const maxDepth int = 25
+const maxDepth int = 50
+
+var rng *rand.Rand = rand.New(rand.NewSource(105))
 
 var backBuffer []Vec3 = make([]Vec3, imageW*imageH)
-var counter int = 0
+var counter int64 = 0
+var world Hittable
+var cam Camera
 
 func renderTexture() *image.RGBA {
 	return image.NewRGBA(image.Rect(0, 0, imageW, imageH))
 }
-
-var world Hittable
-var cam Camera
 
 func main() {
 	cam = NewCamera()
@@ -73,7 +75,9 @@ func main() {
 	tidyUp()
 }
 
-func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Label) {
+func renderScene(renderTexture *image.RGBA,
+	img *canvas.Image,
+	clock *widget.Label) {
 	fmt.Println("Cold boot...")
 	coldBoot := time.After(time.Second / 4)
 	<-coldBoot
@@ -88,9 +92,9 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Lab
 		counter++
 
 		pixels := make(chan Pixel, imageW*imageH)
-
 		start := time.Now()
-		go writePixels(renderTexture, pixels)
+
+		writePixels(rng, pixels)
 
 		for pixel := range pixels {
 			renderTexture.Set(pixel.X, pixel.Y, pixel.Color.ToRGB())
@@ -99,46 +103,55 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Lab
 		duration := time.Since(start)
 
 		clock.SetText(fmt.Sprintf("FPS: %f", 1.0/duration.Seconds())[:10])
-
 		img.Refresh()
 
 		go time.After(loopDuration)
 	}
 }
 
-func writePixels(renderTexture *image.RGBA, buffer chan Pixel) {
+func writePixels(rng *rand.Rand, buffer chan Pixel) {
+	wg := &sync.WaitGroup{}
+	wg.Add(imageH)
+
 	for y := 0; y < imageH; y++ {
-		for x := 0; x < imageW; x++ {
-			u := (float64(x) + (rand.Float64()*2 - 1)) / float64(imageW)
-			v := 1 - (float64(y)+(rand.Float64()*2-1))/float64(imageH)
-
-			ray := cam.getRay(u, v)
-			sample := rayColor(&ray, &world, maxDepth)
-
-			i := y*imageW + x
-			pixelColor := backBuffer[i]
-			pixelColor = Add(pixelColor, sample)
-			backBuffer[i] = pixelColor
-
-			pixelColor.Scale(1.0 / float64(counter)).Sqrt()
-
-			buffer <- Pixel{X: x, Y: y, Color: pixelColor}
-		}
+		scanLine(y, buffer, rng, wg)
 	}
 
+	wg.Wait()
 	close(buffer)
 }
 
-func rayColor(ray *Ray, world *Hittable, depth int) Vec3 {
+func scanLine(y int, buffer chan Pixel, rng *rand.Rand, wg *sync.WaitGroup) {
+	for x := 0; x < imageW; x++ {
+		u := (float64(x) + (rng.Float64()*2 - 1)) / float64(imageW)
+		v := 1 - (float64(y)+(rng.Float64()*2-1))/float64(imageH)
+
+		ray := cam.getRay(u, v)
+		sample := rayColor(&ray, &world, rng, maxDepth)
+
+		i := y*imageW + x
+		pixelColor := backBuffer[i]
+		pixelColor = Add(pixelColor, sample)
+		backBuffer[i] = pixelColor
+
+		pixelColor.Scale(1.0 / float64(counter)).Sqrt()
+
+		buffer <- Pixel{X: x, Y: y, Color: pixelColor}
+	}
+
+	wg.Done()
+}
+
+func rayColor(ray *Ray, world *Hittable, rng *rand.Rand, depth int) Vec3 {
 	rec := HitRecord{}
 	if depth <= 0 {
 		return Vec3{}
 	}
 
 	if (*world).Hit(ray, 0, math.Inf(1), &rec) {
-		target := Add(Add(rec.Point, rec.Normal), RandomInUnitSphere())
+		target := Add(Add(rec.Point, rec.Normal), RandomInUnitSphere(rng))
 		nextRay := Ray{rec.Point, Subtract(target, rec.Point)}
-		nextColor := rayColor(&nextRay, world, depth-1)
+		nextColor := rayColor(&nextRay, world, rng, depth-1)
 		return Mul(nextColor, 0.5)
 	}
 

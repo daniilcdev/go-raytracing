@@ -76,17 +76,17 @@ func Add(a Vec3, b Vec3) Vec3 {
 	return Vec3{a.X + b.X, a.Y + b.Y, a.Z + b.Z}
 }
 
-func Random() Vec3 {
-	return Vec3{rand.Float64(), rand.Float64(), rand.Float64()}
+func Random(rng *rand.Rand) Vec3 {
+	return Vec3{rng.Float64(), rng.Float64(), rng.Float64()}
 }
 
-func RandomRange(min, max float64) Vec3 {
+func RandomRange(min, max float64, rng *rand.Rand) Vec3 {
 	return Vec3{
-		rand.Float64()*(max-min) + min,
-		rand.Float64()*(max-min) + min,
-		rand.Float64()*(max-min) + min}
+		rng.Float64()*(max-min) + min,
+		rng.Float64()*(max-min) + min,
+		rng.Float64()*(max-min) + min}
 }
 
-func RandomInUnitSphere() Vec3 {
-	return Normalized(RandomRange(-1, 1))
+func RandomInUnitSphere(rng *rand.Rand) Vec3 {
+	return Normalized(RandomRange(-1, 1, rng))
 }
