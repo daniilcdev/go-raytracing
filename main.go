@@ -18,11 +18,16 @@ const aspect float32 = 16.0 / 9.0
 const imageW int = 480
 const imageH int = int(float32(imageW) / aspect)
 
+func renderTexture() *image.RGBA {
+	return image.NewRGBA(image.Rect(0, 0, imageW, imageH))
+}
+
 func main() {
 	a := app.New()
 	w := a.NewWindow("Viewport")
 	clock := widget.NewLabel("")
-	img := canvas.NewImageFromImage(render())
+	renderTexture := renderTexture()
+	img := canvas.NewImageFromImage(renderTexture)
 	img.FillMode = canvas.ImageFillOriginal | canvas.ImageFillStretch
 
 	fmt.Println(img.Size())
@@ -34,6 +39,7 @@ func main() {
 
 	w.SetContent(hBox)
 	w.Resize(size)
+	w.Show()
 
 	go func() {
 		for range time.Tick(time.Second) {
@@ -41,11 +47,18 @@ func main() {
 		}
 	}()
 
+	go renderScene(renderTexture, img)
+
 	w.ShowAndRun()
 	tidyUp()
 }
 
-func render() image.Image {
+func renderScene(renderTexture *image.RGBA, img *canvas.Image) {
+	fmt.Println("Cold boot...")
+	coldBoot := time.After(time.Second / 4)
+	<-coldBoot
+	fmt.Println("Done")
+
 	const viewportH = 2.0
 	const viewportW = aspect * viewportH
 	const focalLength = 1.0
@@ -58,19 +71,29 @@ func render() image.Image {
 	llc = Subtract(llc, Mul(vertical, 0.5))
 	llc = Subtract(llc, Vec3{Z: focalLength})
 
-	img := image.NewRGBA(image.Rect(0, 0, imageW, imageH))
-	for x := 0; x < imageW; x++ {
-		for y := 0; y < imageH; y++ {
-			u := float64(x) / float64(imageW-1)
-			v := 1 - float64(y)/float64(imageH-1)
+	t := time.Second / 60
+	duration := time.Duration(t)
 
-			dir := Subtract(Add(Add(llc, Mul(horizontal, u)), Mul(vertical, v)), origin)
-			ray := Ray{Origin: origin, Dir: dir}
-			pixel := rayColor(&ray)
-			img.Set(x, y, pixel)
+	for range time.Tick(duration) {
+		for y := 0; y < imageH; y++ {
+			for x := 0; x < imageW; x++ {
+				go perPixel(x, y, renderTexture, origin, llc, horizontal, vertical)
+			}
 		}
+
+		img.Refresh()
 	}
-	return img
+}
+
+func perPixel(x, y int, renderTexture *image.RGBA, origin Vec3, llc Vec3, horizontal Vec3, vertical Vec3) {
+	u := float64(x) / float64(imageW-1)
+	v := 1 - float64(y)/float64(imageH-1)
+
+	dir := Subtract(Add(Add(llc, Mul(horizontal, u)), Mul(vertical, v)), origin)
+	ray := Ray{Origin: origin, Dir: dir}
+	pixel := rayColor(&ray)
+	renderTexture.Set(x, y, pixel)
+
 }
 
 func getHitDistance(center *Vec3, radius float64, r *Ray) float64 {
