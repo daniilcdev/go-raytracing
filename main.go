@@ -83,15 +83,18 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Lab
 	loopDuration := time.Duration(t)
 
 	for {
+		pixels := make(chan Pixel, imageW*imageH)
+
 		start := time.Now()
-		for y := 0; y < imageH; y++ {
-			for x := 0; x < imageW; x++ {
-				perPixel(x, y, renderTexture)
-			}
+		go writePixels(renderTexture, pixels)
+
+		for pixel := range pixels {
+			renderTexture.Set(pixel.X, pixel.Y, pixel.Color.ToRGB())
 		}
 
 		duration := time.Since(start)
-		clock.SetText(fmt.Sprintf("FPS: %f", 1/duration.Seconds())[:10])
+
+		clock.SetText(fmt.Sprintf("FPS: %f", 1.0/duration.Seconds())[:10])
 
 		img.Refresh()
 
@@ -99,26 +102,33 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Lab
 	}
 }
 
-func perPixel(x, y int, renderTexture *image.RGBA) {
-	var samples Vec3 = Vec3{}
-	u := (float64(x) + rand.Float64()*2 - 1) / float64(imageW)
-	v := 1 - (float64(y)+rand.Float64()*2-1)/float64(imageH)
+func writePixels(renderTexture *image.RGBA, buffer chan Pixel) {
+	for y := 0; y < imageH; y++ {
+		for x := 0; x < imageW; x++ {
+			sample := Vec3{}
+			u := (float64(x) + rand.Float64()*2 - 1) / float64(imageW)
+			v := 1 - (float64(y)+rand.Float64()*2-1)/float64(imageH)
 
-	ray := cam.getRay(u, v)
-	samples.Add(rayColor(&ray, &world, maxDepth))
+			ray := cam.getRay(u, v)
+			sample.Add(rayColor(&ray, &world, maxDepth))
 
-	const lerp float64 = 0.5
-	samples.Sqrt().Scale(1 - lerp)
+			const lerp float64 = 0.5
+			sample.Sqrt().Scale(1 - lerp)
 
-	var c color.RGBA = renderTexture.RGBAAt(x, y)
-	pixel := Vec3{
-		X: float64(c.R) / 255,
-		Y: float64(c.G) / 255,
-		Z: float64(c.B) / 255,
+			var c color.RGBA = renderTexture.RGBAAt(x, y)
+			pixelColor := Vec3{
+				X: float64(c.R) / 255,
+				Y: float64(c.G) / 255,
+				Z: float64(c.B) / 255,
+			}
+
+			pixelColor = Add(Mul(pixelColor, lerp), sample)
+
+			buffer <- Pixel{X: x, Y: y, Color: pixelColor}
+		}
 	}
 
-	pixel = Add(Mul(pixel, lerp), samples)
-	renderTexture.Set(x, y, pixel.ToRGB())
+	close(buffer)
 }
 
 func rayColor(ray *Ray, world *Hittable, depth int) Vec3 {
