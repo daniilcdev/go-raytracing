@@ -53,6 +53,10 @@ func Mul(v Vec3, t float64) Vec3 {
 	return Vec3{v.X * t, v.Y * t, v.Z * t}
 }
 
+func Divide(v Vec3, t float64) Vec3 {
+	return Vec3{v.X / t, v.Y / t, v.Z / t}
+}
+
 func Subtract(a Vec3, b Vec3) Vec3 {
 	return Vec3{a.X - b.X, a.Y - b.Y, a.Z - b.Z}
 }

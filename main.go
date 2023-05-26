@@ -22,15 +22,27 @@ func renderTexture() *image.RGBA {
 	return image.NewRGBA(image.Rect(0, 0, imageW, imageH))
 }
 
+var world Hittable
+
 func main() {
+	var objs []Hittable = make([]Hittable, 0)
+	objs = append(objs, Sphere{
+		Center: Vec3{0, 0, -1},
+		Radius: 0.5,
+	})
+	objs = append(objs, Sphere{
+		Center: Vec3{0, -100.5, -1},
+		Radius: 100,
+	})
+
+	world = HittableList{objects: objs}
+
 	a := app.New()
 	w := a.NewWindow("Viewport")
 	clock := widget.NewLabel("")
 	renderTexture := renderTexture()
 	img := canvas.NewImageFromImage(renderTexture)
 	img.FillMode = canvas.ImageFillOriginal | canvas.ImageFillStretch
-
-	fmt.Println(img.Size())
 
 	updateTime(clock)
 
@@ -39,7 +51,6 @@ func main() {
 
 	w.SetContent(hBox)
 	w.Resize(size)
-	w.Show()
 
 	go func() {
 		for range time.Tick(time.Second) {
@@ -55,9 +66,11 @@ func main() {
 
 func renderScene(renderTexture *image.RGBA, img *canvas.Image) {
 	fmt.Println("Cold boot...")
-	coldBoot := time.After(time.Second / 4)
+	coldBoot := time.After(time.Second)
 	<-coldBoot
 	fmt.Println("Done")
+	img.Resize(fyne.NewSize(float32(imageW), float32(imageH)))
+	img.Refresh()
 
 	const viewportH = 2.0
 	const viewportW = aspect * viewportH
@@ -91,34 +104,20 @@ func perPixel(x, y int, renderTexture *image.RGBA, origin Vec3, llc Vec3, horizo
 
 	dir := Subtract(Add(Add(llc, Mul(horizontal, u)), Mul(vertical, v)), origin)
 	ray := Ray{Origin: origin, Dir: dir}
-	pixel := rayColor(&ray)
+	pixel := rayColor(&ray, &world)
 	renderTexture.Set(x, y, pixel)
-
 }
 
-func getHitDistance(center *Vec3, radius float64, r *Ray) float64 {
-	oc := Subtract(r.Origin, *center)
-	a := r.Dir.SqrMag()
-	half_b := Dot(oc, r.Dir)
-	c := oc.SqrMag() - radius*radius
+func rayColor(ray *Ray, world *Hittable) color.Color {
+	rec := HitRecord{}
 
-	discriminant := half_b*half_b - a*c
-	if discriminant > 0 {
-		return (-half_b - math.Sqrt(discriminant)) / a
-	} else {
-		return -1
-	}
-}
-
-func rayColor(ray *Ray) color.Color {
-	hitDistance := getHitDistance(&Vec3{Z: -1}, 0.5, ray)
-	if hitDistance > 0 {
-		n := Normalized(Subtract(ray.At(hitDistance), Vec3{Z: -1}))
-		return n.Add(Vec3One()).Scale(0.5).ToRGB()
+	if (*world).Hit(ray, 0, math.Inf(1), &rec) {
+		c := Mul(Add(rec.Normal, Vec3One()), 0.5)
+		return c.ToRGB()
 	}
 
 	unitDir := Normalized(ray.Dir)
-	hitDistance = 0.5 * (unitDir.Y + 1.0)
+	hitDistance := 0.5 * (unitDir.Y + 1.0)
 	c := Add(Mul(Vec3One(), 1-hitDistance), Mul(Vec3{0.5, 0.7, 1}, hitDistance))
 
 	return c.ToRGB()
