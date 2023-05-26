@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"math"
 	"math/rand"
 	"time"
@@ -16,9 +15,12 @@ import (
 )
 
 const aspect float32 = 16.0 / 9.0
-const imageW int = 400
+const imageW int = 960
 const imageH int = int(float32(imageW) / aspect)
-const maxDepth int = 10
+const maxDepth int = 25
+
+var backBuffer []Vec3 = make([]Vec3, imageW*imageH)
+var counter int = 0
 
 func renderTexture() *image.RGBA {
 	return image.NewRGBA(image.Rect(0, 0, imageW, imageH))
@@ -41,11 +43,11 @@ func main() {
 			Radius: 0.5,
 		},
 		Sphere{
-			Center: Vec3{-1, 0, -1},
+			Center: Vec3{-1.1, 0, -1},
 			Radius: 0.5,
 		},
 		Sphere{
-			Center: Vec3{1, 0, -1},
+			Center: Vec3{1.1, 0, -1},
 			Radius: 0.5,
 		},
 	)
@@ -83,6 +85,8 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Lab
 	loopDuration := time.Duration(t)
 
 	for {
+		counter++
+
 		pixels := make(chan Pixel, imageW*imageH)
 
 		start := time.Now()
@@ -105,24 +109,18 @@ func renderScene(renderTexture *image.RGBA, img *canvas.Image, clock *widget.Lab
 func writePixels(renderTexture *image.RGBA, buffer chan Pixel) {
 	for y := 0; y < imageH; y++ {
 		for x := 0; x < imageW; x++ {
-			sample := Vec3{}
-			u := (float64(x) + rand.Float64()*2 - 1) / float64(imageW)
-			v := 1 - (float64(y)+rand.Float64()*2-1)/float64(imageH)
+			u := (float64(x) + (rand.Float64()*2 - 1)) / float64(imageW)
+			v := 1 - (float64(y)+(rand.Float64()*2-1))/float64(imageH)
 
 			ray := cam.getRay(u, v)
-			sample.Add(rayColor(&ray, &world, maxDepth))
+			sample := rayColor(&ray, &world, maxDepth)
 
-			const lerp float64 = 0.5
-			sample.Sqrt().Scale(1 - lerp)
+			i := y*imageW + x
+			pixelColor := backBuffer[i]
+			pixelColor = Add(pixelColor, sample)
+			backBuffer[i] = pixelColor
 
-			var c color.RGBA = renderTexture.RGBAAt(x, y)
-			pixelColor := Vec3{
-				X: float64(c.R) / 255,
-				Y: float64(c.G) / 255,
-				Z: float64(c.B) / 255,
-			}
-
-			pixelColor = Add(Mul(pixelColor, lerp), sample)
+			pixelColor.Scale(1.0 / float64(counter)).Sqrt()
 
 			buffer <- Pixel{X: x, Y: y, Color: pixelColor}
 		}
