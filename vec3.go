@@ -57,7 +57,7 @@ func Dot(a Vec3, b Vec3) float64 {
 }
 
 func Normalized(v Vec3) Vec3 {
-	return *v.Scale(1 / v.Mag())
+	return Divide(v, v.Mag())
 }
 
 func Mul(v Vec3, t float64) Vec3 {

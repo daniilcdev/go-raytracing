@@ -22,13 +22,12 @@ func Render() {
 	for y := 0; y < rectSize.Y; y++ {
 		for x := 0; x < rectSize.X; x++ {
 			color := perPixel(x, y)
-			accumulatedPixel := accumulationData[x+y*rectSize.X]
-			accumulatedPixel = Clamp01(
-				Divide(
-					Add(color, accumulatedPixel),
-					float64(frameIndex)),
-			)
+
+			accumulatedPixel := Add(accumulationData[x+y*rectSize.X], color)
 			accumulationData[x+y*rectSize.X] = accumulatedPixel
+
+			accumulatedPixel = Divide(accumulatedPixel, float64(frameIndex))
+			accumulatedPixel = Clamp01(accumulatedPixel)
 
 			finalImage.Set(x, y, accumulatedPixel.ToRGB())
 		}
@@ -53,8 +52,8 @@ func GetFinalImage() *image.RGBA {
 
 func perPixel(x, y int) Vec3 {
 	ray := Ray{}
-	ray.Origin = cam.Origin
-	ray.Dir = Vec3{0, 0, -1}
+	ray.Origin = cam.position
+	ray.Dir = cam.rayDirections[x+y*cam.viewportWidth]
 
 	light := Vec3{}
 	contribution := Vec3One()
@@ -62,17 +61,15 @@ func perPixel(x, y int) Vec3 {
 	for i := 0; i < 5; i++ {
 		payload := traceRay(ray)
 		if payload.Distance < 0 {
-			skyColor := Vec3{0.6, 0.7, 0.9}
-			light = Add(light, MWiseMul(skyColor, contribution))
 			break
 		}
 
-		sphere := world.objects[payload.ObjectIndex]
-		material := materials[sphere.MaterialIndex()]
+		sphere := scene.Spheres[payload.ObjectIndex]
+		material := scene.Materials[sphere.MaterialId]
 
-		light = Add(light, material.GetEmmision())
+		light = Add(light, material.GetEmission())
 		contribution = MWiseMul(contribution, material.Albedo)
-		ray.Origin = Add(payload.Point, Mul(payload.Normal, 0.00001))
+		ray.Origin = Add(payload.Point, Mul(payload.Normal, 0.0001))
 		ray.Dir = Normalized(Add(payload.Normal, RandomInUnitSphere(rng)))
 	}
 
@@ -83,18 +80,20 @@ func traceRay(r Ray) HitRecord {
 	closestSphere := -1
 	hitDistance := math.MaxFloat64
 
-	for i := range world.objects {
-		sphere := world.objects[i]
-		origin := Subtract(r.Origin, sphere.CenterPoint())
+	for i := range scene.Spheres {
+		sphere := scene.Spheres[i]
+		origin := Subtract(r.Origin, sphere.Center)
 		a := Dot(r.Dir, r.Dir)
 		b := Dot(origin, r.Dir) * 2.0
-		c := Dot(origin, origin) - sphere.R()*sphere.R()
+		c := Dot(origin, origin) - sphere.Radius*sphere.Radius
 		discriminant := b*b - 4.0*a*c
 		if discriminant < 0 {
 			continue
 		}
 
 		closest := (-b - math.Sqrt(discriminant)) / (2.0 * a)
+		// closest1 := (-b + math.Sqrt(discriminant)) / (2.0 * a)
+
 		if closest > 0.0 && closest < hitDistance {
 			hitDistance = closest
 			closestSphere = i
@@ -113,11 +112,11 @@ func closestHit(r Ray, distance float64, objectIndex int) HitRecord {
 	payload.Distance = distance
 	payload.ObjectIndex = objectIndex
 
-	closestSphere := world.objects[objectIndex]
-	origin := Subtract(r.Origin, closestSphere.CenterPoint())
+	closestSphere := scene.Spheres[objectIndex]
+	origin := Subtract(r.Origin, closestSphere.Center)
 	payload.Point = Add(origin, Mul(r.Dir, distance))
 	payload.Normal = Normalized(payload.Point)
-	payload.Point = Add(payload.Point, closestSphere.CenterPoint())
+	payload.Point = Add(payload.Point, closestSphere.Center)
 
 	return payload
 }

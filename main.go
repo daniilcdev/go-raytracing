@@ -13,34 +13,48 @@ import (
 )
 
 const aspect float32 = 16.0 / 9.0
-const imageW int = 400
+const imageW int = 960
 const imageH int = int(float32(imageW) / aspect)
 
-var rng *rand.Rand = rand.New(rand.NewSource(105))
+var rng *rand.Rand = rand.New(rand.NewSource(1))
 
-var world HittableList
-var cam Camera
-
-var materials [3]Material
+var cam *Camera
+var scene Scene
 
 func main() {
-	cam = NewCameraAt(Vec3{0.0, 0.1, 10})
+	cam = &Camera{
+		forwardDirection: Vec3{0, 0, -1},
+		position:         Vec3{0, 0, 6},
+		Fov:              45,
+		nearClip:         0.1,
+		farClip:          100,
+	}
 
-	materials = [3]Material{}
-	materials[0] = Material{Albedo: Vec3{1, 0, 1}}
-	materials[1] = Material{Albedo: Vec3{.2, 0.3, 1}, Roughness: 0.1}
-	materials[2] = Material{Albedo: Vec3{.8, 0.5, 0.2}, Roughness: 0.1, EmissionPower: 2., EmissionColor: Vec3{.8, 0.5, 0.2}}
+	scene = Scene{}
+	scene.Materials = append([]Material{},
+		Material{
+			Albedo: Vec3{1, 0, 1},
+		},
+		Material{
+			Albedo:    Vec3{0.2, 0.3, 1},
+			Roughness: 0.1,
+		},
+		Material{
+			Albedo:        Vec3{0.8, 0.5, 0.2},
+			Roughness:     0.1,
+			EmissionPower: 10.0,
+			EmissionColor: Vec3{0.8, 0.5, 0.2},
+		})
 
-	var objs []Hittable = make([]Hittable, 0)
-	objs = append(objs,
+	scene.Spheres = append([]Sphere{},
 		Sphere{
 			Center:     Vec3{0, 0.0, 0},
 			Radius:     1,
 			MaterialId: 0,
 		},
 		Sphere{
-			Center:     Vec3{2, 0, 0},
-			Radius:     1,
+			Center:     Vec3{15, 5, -15},
+			Radius:     10,
 			MaterialId: 2,
 		},
 		Sphere{
@@ -50,14 +64,15 @@ func main() {
 		},
 	)
 
-	world = HittableList{objects: objs}
-
 	a := app.New()
 	w := a.NewWindow("Viewport")
 
 	clock := widget.NewLabel("FPS: 60.00")
 
 	Resize(imageW, imageH)
+	cam.recalculateView()
+	cam.Resize(imageW, imageH)
+
 	renderTexture := GetFinalImage()
 
 	img := canvas.NewImageFromImage(renderTexture)
@@ -95,7 +110,8 @@ func renderScene(img *canvas.Image,
 		clock.SetText(fmt.Sprintf("FPS: %f", 1.0/duration.Seconds())[:10])
 		img.Refresh()
 
-		go time.After(loopDuration)
+		after := time.After(loopDuration)
+		<-after
 	}
 }
 
