@@ -64,8 +64,20 @@ func Mul(v Vec3, t float64) Vec3 {
 	return Vec3{v.X * t, v.Y * t, v.Z * t}
 }
 
+func MWiseMul(v, s Vec3) Vec3 {
+	return Vec3{v.X * s.X, v.Y * s.Y, v.Z * s.Z}
+}
+
 func Divide(v Vec3, t float64) Vec3 {
 	return Vec3{v.X / t, v.Y / t, v.Z / t}
+}
+
+func Clamp01(v Vec3) Vec3 {
+	return Vec3{
+		math.Max(math.Min(1, v.X), 0),
+		math.Max(math.Min(1, v.Y), 0),
+		math.Max(math.Min(1, v.Z), 0),
+	}
 }
 
 func Subtract(a Vec3, b Vec3) Vec3 {

@@ -2,10 +2,7 @@ package main
 
 import (
 	"fmt"
-	"image"
-	"math"
 	"math/rand"
-	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -18,39 +15,38 @@ import (
 const aspect float32 = 16.0 / 9.0
 const imageW int = 400
 const imageH int = int(float32(imageW) / aspect)
-const maxDepth int = 50
 
 var rng *rand.Rand = rand.New(rand.NewSource(105))
 
-var backBuffer []Vec3 = make([]Vec3, imageW*imageH)
-var counter int64 = 0
-var world Hittable
+var world HittableList
 var cam Camera
 
-func renderTexture() *image.RGBA {
-	return image.NewRGBA(image.Rect(0, 0, imageW, imageH))
-}
+var materials [3]Material
 
 func main() {
-	cam = NewCamera()
+	cam = NewCameraAt(Vec3{0.0, 0.1, 10})
+
+	materials = [3]Material{}
+	materials[0] = Material{Albedo: Vec3{1, 0, 1}}
+	materials[1] = Material{Albedo: Vec3{.2, 0.3, 1}, Roughness: 0.1}
+	materials[2] = Material{Albedo: Vec3{.8, 0.5, 0.2}, Roughness: 0.1, EmissionPower: 2., EmissionColor: Vec3{.8, 0.5, 0.2}}
 
 	var objs []Hittable = make([]Hittable, 0)
 	objs = append(objs,
 		Sphere{
-			Center: Vec3{0, -100.5, -1},
-			Radius: 100,
+			Center:     Vec3{0, 0.0, 0},
+			Radius:     1,
+			MaterialId: 0,
 		},
 		Sphere{
-			Center: Vec3{0, 0, -1},
-			Radius: 0.5,
+			Center:     Vec3{2, 0, 0},
+			Radius:     1,
+			MaterialId: 2,
 		},
 		Sphere{
-			Center: Vec3{-1.1, 0, -1},
-			Radius: 0.5,
-		},
-		Sphere{
-			Center: Vec3{1.1, 0, -1},
-			Radius: 0.5,
+			Center:     Vec3{.0, -101, 0},
+			Radius:     100,
+			MaterialId: 1,
 		},
 	)
 
@@ -58,8 +54,12 @@ func main() {
 
 	a := app.New()
 	w := a.NewWindow("Viewport")
+
 	clock := widget.NewLabel("FPS: 60.00")
-	renderTexture := renderTexture()
+
+	Resize(imageW, imageH)
+	renderTexture := GetFinalImage()
+
 	img := canvas.NewImageFromImage(renderTexture)
 	img.FillMode = canvas.ImageFillOriginal | canvas.ImageFillStretch
 
@@ -69,14 +69,13 @@ func main() {
 	w.SetContent(hBox)
 	w.Resize(size)
 
-	go renderScene(renderTexture, img, clock)
+	go renderScene(img, clock)
 
 	w.ShowAndRun()
 	tidyUp()
 }
 
-func renderScene(renderTexture *image.RGBA,
-	img *canvas.Image,
+func renderScene(img *canvas.Image,
 	clock *widget.Label) {
 	fmt.Println("Cold boot...")
 	coldBoot := time.After(time.Second / 4)
@@ -89,17 +88,8 @@ func renderScene(renderTexture *image.RGBA,
 	loopDuration := time.Duration(t)
 
 	for {
-		counter++
-
-		pixels := make(chan Pixel, imageW*imageH)
 		start := time.Now()
-
-		writePixels(rng, pixels)
-
-		for pixel := range pixels {
-			renderTexture.Set(pixel.X, pixel.Y, pixel.Color.ToRGB())
-		}
-
+		Render()
 		duration := time.Since(start)
 
 		clock.SetText(fmt.Sprintf("FPS: %f", 1.0/duration.Seconds())[:10])
@@ -107,59 +97,6 @@ func renderScene(renderTexture *image.RGBA,
 
 		go time.After(loopDuration)
 	}
-}
-
-func writePixels(rng *rand.Rand, buffer chan Pixel) {
-	wg := &sync.WaitGroup{}
-	wg.Add(imageH)
-
-	for y := 0; y < imageH; y++ {
-		scanLine(y, buffer, rng, wg)
-	}
-
-	wg.Wait()
-	close(buffer)
-}
-
-func scanLine(y int, buffer chan Pixel, rng *rand.Rand, wg *sync.WaitGroup) {
-	for x := 0; x < imageW; x++ {
-		u := (float64(x) + (rng.Float64()*2 - 1)) / float64(imageW)
-		v := 1 - (float64(y)+(rng.Float64()*2-1))/float64(imageH)
-
-		ray := cam.getRay(u, v)
-		sample := rayColor(&ray, &world, rng, maxDepth)
-
-		i := y*imageW + x
-		pixelColor := backBuffer[i]
-		pixelColor = Add(pixelColor, sample)
-		backBuffer[i] = pixelColor
-
-		pixelColor.Scale(1.0 / float64(counter)).Sqrt()
-
-		buffer <- Pixel{X: x, Y: y, Color: pixelColor}
-	}
-
-	wg.Done()
-}
-
-func rayColor(ray *Ray, world *Hittable, rng *rand.Rand, depth int) Vec3 {
-	rec := HitRecord{}
-	if depth <= 0 {
-		return Vec3{}
-	}
-
-	if (*world).Hit(ray, 0, math.Inf(1), &rec) {
-		target := Add(Add(rec.Point, rec.Normal), RandomInUnitSphere(rng))
-		nextRay := Ray{rec.Point, Subtract(target, rec.Point)}
-		nextColor := rayColor(&nextRay, world, rng, depth-1)
-		return Mul(nextColor, 0.5)
-	}
-
-	unitDir := Normalized(ray.Dir)
-	hitDistance := 0.5 * (unitDir.Y + 1.0)
-	c := Add(Mul(Vec3One(), 1-hitDistance), Mul(Vec3{0.5, 0.7, 1}, hitDistance))
-
-	return c
 }
 
 func tidyUp() {
