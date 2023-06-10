@@ -9,7 +9,7 @@ import (
 var frameIndex int = 1
 var finalImage *image.RGBA
 
-var accumulationData []Pixel
+var accumulationData []Vec3
 
 func Render() {
 	if frameIndex == 1 {
@@ -23,14 +23,14 @@ func Render() {
 		for x := 0; x < rectSize.X; x++ {
 			color := perPixel(x, y)
 			accumulatedPixel := accumulationData[x+y*rectSize.X]
-			accumulatedPixel.Color = Clamp01(
+			accumulatedPixel = Clamp01(
 				Divide(
-					Add(color.Color, accumulatedPixel.Color),
+					Add(color, accumulatedPixel),
 					float64(frameIndex)),
 			)
 			accumulationData[x+y*rectSize.X] = accumulatedPixel
 
-			finalImage.Set(x, y, accumulatedPixel.Color.ToRGB())
+			finalImage.Set(x, y, accumulatedPixel.ToRGB())
 		}
 	}
 
@@ -44,14 +44,14 @@ func Resize(w, h int) {
 	}
 
 	finalImage = image.NewRGBA(image.Rect(0, 0, w, h))
-	accumulationData = make([]Pixel, w*h)
+	accumulationData = make([]Vec3, w*h)
 }
 
 func GetFinalImage() *image.RGBA {
 	return finalImage
 }
 
-func perPixel(x, y int) Pixel {
+func perPixel(x, y int) Vec3 {
 	ray := Ray{}
 	ray.Origin = cam.Origin
 	ray.Dir = Vec3{0, 0, -1}
@@ -76,7 +76,7 @@ func perPixel(x, y int) Pixel {
 		ray.Dir = Normalized(Add(payload.Normal, RandomInUnitSphere(rng)))
 	}
 
-	return Pixel{X: x, Y: y, Color: light}
+	return light
 }
 
 func traceRay(r Ray) HitRecord {
@@ -127,9 +127,7 @@ func resetAccumulatedData() {
 		return
 	}
 
-	pixel := accumulationData[0]
-	pixel.Color = Vec3{}
-	accumulationData[0] = pixel
+	accumulationData[0] = Vec3{}
 	for bp := 1; bp < len(accumulationData); bp *= 2 {
 		copy(accumulationData[bp:], accumulationData[:bp])
 	}
